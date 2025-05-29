@@ -45,9 +45,9 @@ for ab in tests_ab:
     temp = temp.rename(columns={ab: "%R"})
     temp["Famille"] = famille
 
-    temp = temp.sort_values("Semaine")
-    temp["moyenne_mobile"] = temp.groupby("Famille")["%R"].transform(lambda x: x.rolling(8, min_periods=1).mean())
-    temp["std_mobile"] = temp.groupby("Famille")["%R"].transform(lambda x: x.rolling(8, min_periods=1).std())
+    temp = temp.sort_values(["UF", "Famille", "Semaine"])
+    temp["moyenne_mobile"] = temp.groupby(["UF", "Famille"])["%R"].transform(lambda x: x.rolling(8, min_periods=1).mean())
+    temp["std_mobile"] = temp.groupby(["UF", "Famille"])["%R"].transform(lambda x: x.rolling(8, min_periods=1).std())
     temp["upper_IC95"] = temp["moyenne_mobile"] + 1.96 * temp["std_mobile"]
 
     temp["Alerte"] = temp["%R"] > temp["upper_IC95"]
