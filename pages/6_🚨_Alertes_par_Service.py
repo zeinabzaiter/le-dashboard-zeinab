@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.express as px
 
 st.set_page_config(page_title="Alertes par famille d'antibiotiques", layout="wide")
-st.title("🚨 Alertes par Service / Famille d'antibiotiques")
+st.title("\U0001F6A8 Alertes par Service / Famille d'antibiotiques")
 
 # Charger le fichier brut
 try:
@@ -46,6 +46,7 @@ for ab in tests_ab:
     temp["Famille"] = famille
 
     temp = temp.sort_values(["UF", "Famille", "Semaine"])
+    temp["%R"] = pd.to_numeric(temp["%R"], errors="coerce")
     temp["moyenne_mobile"] = temp.groupby(["UF", "Famille"])["%R"].transform(lambda x: x.rolling(8, min_periods=1).mean())
     temp["std_mobile"] = temp.groupby(["UF", "Famille"])["%R"].transform(lambda x: x.rolling(8, min_periods=1).std())
     temp["upper_IC95"] = temp["moyenne_mobile"] + 1.96 * temp["std_mobile"]
@@ -72,7 +73,7 @@ st.subheader("📋 Tableau des alertes")
 st.dataframe(resume, use_container_width=True)
 
 # Export CSV
-st.download_button("📅 Exporter CSV", data=resume.to_csv(index=False).encode('utf-8'), file_name="alertes_famille.csv", mime="text/csv")
+st.download_button("🗕️ Exporter CSV", data=resume.to_csv(index=False).encode('utf-8'), file_name="alertes_famille.csv", mime="text/csv")
 
 # Affichage du graphique
 st.subheader("📊 Graphique des alertes par semaine et service")
