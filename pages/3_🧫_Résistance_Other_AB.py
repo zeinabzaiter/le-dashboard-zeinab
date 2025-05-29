@@ -43,17 +43,16 @@ if colonnes_res:
         annotation_text="Seuil IC95%"
     )
 
-    if alerte:
-        fig.add_trace(go.Scatter(
-            x=[dernier['Semaine']] if 'Semaine' in df.columns else [dernier.name],
-            y=[dernier['moyenne_mobile']],
-            mode='markers',
-            marker=dict(size=16, color='darkred'),
-            name="Alerte"
-        ))
-        st.error(f"🚨 Alerte : {ab} dépasse le seuil IC95% à la dernière semaine")
+    # Détecter les points en alerte
+points_alerte = df[df['moyenne_mobile'] > df['upper_IC95']]
 
-    fig.update_layout(title=f"{ab} - Résistance avec IC95%", xaxis_title="Semaine", yaxis_title="% Résistance")
-    st.plotly_chart(fig, use_container_width=True)
-else:
-    st.warning("Aucune colonne de type '%R ...' trouvée dans le fichier.")
+# Afficher tous les points d'alerte
+if not points_alerte.empty:
+    fig.add_trace(go.Scatter(
+        x=points_alerte['Semaine'] if 'Semaine' in df.columns else points_alerte.index,
+        y=points_alerte['moyenne_mobile'],
+        mode='markers',
+        marker=dict(size=16, color='darkred'),
+        name="⚠️ Alerte"
+    ))
+    st.error(f"🚨 Alerte : {len(points_alerte)} points au-dessus du seuil IC95% détectés.")
