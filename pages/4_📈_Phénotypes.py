@@ -2,79 +2,86 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 
-st.title("📈 Phénotypes - Évolution")
+st.title("📈 Phénotypes - Taux et Occurrences")
 
-# Charger les données
+# Chargement du fichier
 df = pd.read_excel("staph_aureus_pheno_final.xlsx")
 df.columns = df.columns.str.strip()
 
-if all(col in df.columns for col in ['Semaine', 'Phénotype', '%Présence']):
+# Renommer si besoin
+if 'Week' in df.columns:
+    df = df.rename(columns={'Week': 'Semaine'})
 
-    semaines = df['Semaine'].unique()
-    selected_sem = st.sidebar.multiselect("Filtrer par semaines :", options=semaines, default=semaines)
-    df = df[df['Semaine'].isin(selected_sem)]
+# Liste des phénotypes (toutes colonnes sauf 'Semaine')
+phenos = [col for col in df.columns if col != 'Semaine']
 
-    phenos = df['Phénotype'].unique()
-    selected_pheno = st.selectbox("Choisir un phénotype :", phenos)
+# Calcul total par semaine pour % (évite division par 0)
+df['total'] = df[phenos].sum(axis=1)
 
-    df_pheno = df[df['Phénotype'] == selected_pheno]
-    df_pheno['%Présence'] = pd.to_numeric(df_pheno['%Présence'], errors='coerce')
+# Interface
+selected = st.selectbox("Choisir un phénotype :", phenos)
 
-    # Calculs
-    df_pheno['moyenne_mobile'] = df_pheno['%Présence'].rolling(8, 1).mean()
-    df_pheno['std_mobile'] = df_pheno['%Présence'].rolling(8, 1).std()
-    df_pheno['upper_IC95'] = df_pheno['moyenne_mobile'] + 1.96 * df_pheno['std_mobile']
+# Calcul %
+df['%'] = df[selected] / df['total'] * 100
 
-    fig = go.Figure()
+# Calcul moyenne mobile & IC95%
+df['moyenne_mobile'] = df['%'].rolling(8, 1).mean()
+df['std_mobile'] = df['%'].rolling(8, 1).std()
+df['upper_IC95'] = df['moyenne_mobile'] + 1.96 * df['std_mobile']
 
+# Alerte VRSA
+is_vrsa = selected.upper() == "VRSA"
+alerte_rows = df[df['moyenne_mobile'] > df['upper_IC95']] if not is_vrsa else df[df[selected] > 0]
+
+# Graphique
+fig = go.Figure()
+
+# Courbe % mobile
+fig.add_trace(go.Scatter(
+    x=df['Semaine'],
+    y=df['moyenne_mobile'],
+    mode='lines+markers',
+    name='% Mobile',
+    line=dict(color='blue')
+))
+
+# Occurrences en bulles
+fig.add_trace(go.Scatter(
+    x=df['Semaine'],
+    y=df['moyenne_mobile'],
+    mode='markers+text',
+    marker=dict(size=12, color='lightblue'),
+    text=df[selected].astype(str),
+    textposition='top center',
+    name='Occurrences'
+))
+
+# Ligne IC95%
+fig.add_hline(
+    y=df['upper_IC95'].mean(),
+    line_dash="dot",
+    line_color="red",
+    annotation_text="Seuil IC95%",
+    annotation_position="top left"
+)
+
+# Points rouges pour alertes
+if not alerte_rows.empty:
     fig.add_trace(go.Scatter(
-        x=df_pheno['Semaine'],
-        y=df_pheno['moyenne_mobile'],
-        mode='lines+markers',
-        name='Moyenne mobile'
+        x=alerte_rows['Semaine'],
+        y=alerte_rows['moyenne_mobile'],
+        mode='markers',
+        marker=dict(size=16, color='darkred'),
+        name='⚠️ Alerte'
     ))
+    st.error(f"🚨 Alerte détectée pour {selected} à {len(alerte_rows)} semaine(s)")
 
-    fig.add_hline(
-        y=df_pheno['upper_IC95'].mean(),
-        line_dash="dot",
-        line_color="red",
-        annotation_text="Seuil IC95%",
-        annotation_position="top left"
-    )
+# Layout
+fig.update_layout(
+    title=f"Évolution du phénotype : {selected}",
+    xaxis_title="Semaine",
+    yaxis_title="% Présence (moyenne mobile)",
+    legend_title="Indicateurs"
+)
 
-    # 🧠 Cas spécial : VRSA
-    if selected_pheno.upper() == "VRSA":
-        if (df_pheno['%Présence'] > 0).any():
-            last_case = df_pheno[df_pheno['%Présence'] > 0].iloc[-1]
-            fig.add_trace(go.Scatter(
-                x=[last_case['Semaine']],
-                y=[last_case['moyenne_mobile']],
-                mode='markers',
-                marker=dict(size=16, color='darkred'),
-                name="⚠️ Alerte"
-            ))
-            st.error(f"🚨 Alerte VRSA : au moins 1 cas détecté à la semaine {last_case['Semaine']}")
-
-    # Autres phénotypes : règles classiques
-    else:
-        alertes = df_pheno[df_pheno['moyenne_mobile'] > df_pheno['upper_IC95']]
-        if not alertes.empty:
-            fig.add_trace(go.Scatter(
-                x=alertes['Semaine'],
-                y=alertes['moyenne_mobile'],
-                mode='markers',
-                marker=dict(size=16, color='darkred'),
-                name="⚠️ Alerte"
-            ))
-            st.error(f"🚨 Alerte : {len(alertes)} point(s) au-dessus du seuil IC95% pour {selected_pheno}")
-
-    fig.update_layout(
-        title=f"Évolution du phénotype : {selected_pheno}",
-        xaxis_title="Semaine",
-        yaxis_title="% Présence"
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
-else:
-    st.warning("❗ Ce fichier doit contenir les colonnes : 'Semaine', 'Phénotype', '%Présence'")
+st.plotly_chart(fig, use_container_width=True)
